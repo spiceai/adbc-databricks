@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
 
 	"github.com/apache/arrow-adbc/go/adbc"
@@ -103,10 +104,19 @@ func newIPCReaderAdapter(ctx context.Context, rows driver.Rows) (array.RecordRea
 		}
 
 		if len(schema_bytes) == 0 {
-			return nil, adbc.Error{
-				Code: adbc.StatusInternal,
-				Msg:  "schema bytes are empty and no data available",
+			// Workaround for https://github.com/databricks/databricks-sql-go/pull/327
+			// SchemaBytes() can be empty when databricks-sql-go doesn't
+			// propagate the schema for 0-row results. Fall back to
+			// building the schema from driver.Rows column metadata.
+			schema, err := schemaFromRowsMetadata(rows)
+			if err != nil {
+				return nil, adbc.Error{
+					Code: adbc.StatusInternal,
+					Msg:  fmt.Sprintf("schema bytes are empty and failed to build schema from column metadata: %v", err),
+				}
 			}
+			adapter.schema = schema
+			return adapter, nil
 		}
 
 		reader, err := ipc.NewReader(bytes.NewReader(schema_bytes))
@@ -128,6 +138,68 @@ func newIPCReaderAdapter(ctx context.Context, rows driver.Rows) (array.RecordRea
 	}
 
 	return adapter, nil
+}
+
+// schemaFromRowsMetadata builds an Arrow schema from driver.Rows column
+// metadata. This is used as a fallback when SchemaBytes() is empty for
+// 0-row result sets: https://github.com/databricks/databricks-sql-go/pull/327
+func schemaFromRowsMetadata(rows driver.Rows) (*arrow.Schema, error) {
+	typed, ok := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	if !ok {
+		return nil, fmt.Errorf("driver.Rows does not implement RowsColumnTypeDatabaseTypeName")
+	}
+
+	nullableTyped, hasNullable := rows.(driver.RowsColumnTypeNullable)
+
+	columns := rows.Columns()
+	fields := make([]arrow.Field, len(columns))
+	for i, name := range columns {
+		dbType := typed.ColumnTypeDatabaseTypeName(i)
+		nullable := true
+		if hasNullable {
+			if n, ok := nullableTyped.ColumnTypeNullable(i); ok {
+				nullable = n
+			}
+		}
+		fields[i] = arrow.Field{
+			Name:     name,
+			Type:     databricksTypeToArrow(dbType),
+			Nullable: nullable,
+		}
+	}
+	return arrow.NewSchema(fields, nil), nil
+}
+
+// databricksTypeToArrow maps a Databricks SQL type name to an Arrow data type.
+func databricksTypeToArrow(dbType string) arrow.DataType {
+	switch strings.ToUpper(dbType) {
+	case "BOOLEAN":
+		return arrow.FixedWidthTypes.Boolean
+	case "BYTE", "TINYINT":
+		return arrow.PrimitiveTypes.Int8
+	case "SHORT", "SMALLINT":
+		return arrow.PrimitiveTypes.Int16
+	case "INT", "INTEGER":
+		return arrow.PrimitiveTypes.Int32
+	case "LONG", "BIGINT":
+		return arrow.PrimitiveTypes.Int64
+	case "FLOAT":
+		return arrow.PrimitiveTypes.Float32
+	case "DOUBLE":
+		return arrow.PrimitiveTypes.Float64
+	case "STRING":
+		return arrow.BinaryTypes.String
+	case "BINARY":
+		return arrow.BinaryTypes.Binary
+	case "DATE":
+		return arrow.FixedWidthTypes.Date32
+	case "TIMESTAMP", "TIMESTAMP_NTZ":
+		return arrow.FixedWidthTypes.Timestamp_us
+	case "DECIMAL":
+		return &arrow.Decimal128Type{Precision: 38, Scale: 18}
+	default:
+		return arrow.BinaryTypes.String
+	}
 }
 
 func (r *ipcReaderAdapter) loadNextReader() error {
