@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -192,7 +193,35 @@ func (d *databaseImpl) resolveConnectionOptions() ([]dbsql.ConnOption, error) {
 		opts = append(opts, dbsql.WithTransport(transport))
 	}
 
+	// Enable native Arrow Decimal128 for DECIMAL columns.
+	// By default databricks-sql-go returns DECIMAL as Utf8 strings.
+	// This tells the server to produce native Decimal128 in IPC batches
+	// and ensures locally-built schemas also use Decimal128.
+	opts = append(opts, withArrowNativeDecimal())
+
 	return opts, nil
+}
+
+// withArrowNativeDecimal creates a dbsql.ConnOption that enables native Arrow
+// Decimal128 for DECIMAL columns.
+//
+// databricks-sql-go's ConnOption type is func(*config.Config) where config is
+// in an internal package. We use reflect.MakeFunc to construct the function
+// value without importing the internal type.
+func withArrowNativeDecimal() dbsql.ConnOption {
+	// Get the concrete type of ConnOption via an existing constructor.
+	optType := reflect.TypeOf(dbsql.WithServerHostname(""))
+
+	fn := reflect.MakeFunc(optType, func(args []reflect.Value) []reflect.Value {
+		cfg := args[0].Elem() // dereference *config.Config
+		field := cfg.FieldByName("UseArrowNativeDecimal")
+		if field.IsValid() && field.CanSet() {
+			field.SetBool(true)
+		}
+		return nil
+	})
+
+	return fn.Interface().(dbsql.ConnOption)
 }
 
 func (d *databaseImpl) initializeConnectionPool(ctx context.Context) (*sql.DB, error) {
