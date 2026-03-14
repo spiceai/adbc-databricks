@@ -112,9 +112,9 @@ github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7
 github.com/rs/xid v1.4.0/go.mod h1:trrq9SKmegXys3aeAKXMUTdJsYXVwGY3RLcfgqegfbg=
 github.com/rs/zerolog v1.28.0 h1:MirSo27VyNi7RJYP3078AA1+Cyzd2GB66qy3aUHvsWY=
 github.com/rs/zerolog v1.28.0/go.mod h1:NILgTygv/Uej1ra5XxGf82ZFSLk58MFGAUS2o6usyD0=
-github.com/sgrebnov/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47 h1:eSUmgQh6f/sfsiot99pPGmPgCqaAnTD5QuMQFQfUAEU=
-github.com/sgrebnov/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47/go.mod h1:TGAVzvXadeKI8me3nKBa/2phLNnyWR6OolYq6iYbN3E=
 github.com/spf13/pflag v1.0.3/go.mod h1:DYY7MBk1bdzusC3SYhjObp+wFpr4gzcvqqNjLnInEg4=
+github.com/spiceai/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47 h1:cWKWiSSm5gZL7+mzFtcx81OUpDLlImuYsXinCRNKdvI=
+github.com/spiceai/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47/go.mod h1:TGAVzvXadeKI8me3nKBa/2phLNnyWR6OolYq6iYbN3E=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=

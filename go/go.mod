@@ -92,4 +92,4 @@ require (
 )
 
 // Use spiceai fork that adds Spark:DataType:SqlName metadata fix when server omits ArrowSchema bytes
-replace github.com/databricks/databricks-sql-go => github.com/sgrebnov/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47
+replace github.com/databricks/databricks-sql-go => github.com/spiceai/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47
