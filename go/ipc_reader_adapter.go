@@ -130,6 +130,11 @@ func newIPCReaderAdapter(ctx context.Context, rows driver.Rows) (array.RecordRea
 		reader.Release()
 	}
 
+	// The server non-deterministically omits Spark:DataType:SqlName
+	// metadata from the IPC schema. Ensure all fields have metadata
+	// using driver.Rows column type info (always available via thrift).
+	adapter.schema = ensureSchemaMetadata(adapter.schema, rows)
+
 	if adapter.schema == nil {
 		return nil, adbc.Error{
 			Code: adbc.StatusInternal,
@@ -165,6 +170,11 @@ func schemaFromRowsMetadata(rows driver.Rows) (*arrow.Schema, error) {
 			Name:     name,
 			Type:     databricksTypeToArrow(dbType),
 			Nullable: nullable,
+			// Spark:DataType:SqlName metadata for consistency with the
+			// server-provided schema and the databricks-sql-go logic.
+			Metadata: arrow.MetadataFrom(map[string]string{
+				"Spark:DataType:SqlName": sparkSqlNameFromDBType(dbType),
+			}),
 		}
 	}
 	return arrow.NewSchema(fields, nil), nil
@@ -200,6 +210,54 @@ func databricksTypeToArrow(dbType string) arrow.DataType {
 	default:
 		return arrow.BinaryTypes.String
 	}
+}
+
+// sparkSqlNameFromDBType converts a database type name to a Spark SQL type name
+// suitable for Spark:DataType:SqlName metadata. For DECIMAL, the precision and
+// scale (38,18) are a default placeholder because ColumnTypeDatabaseTypeName
+// returns just "DECIMAL" with no way to determine the actual precision or scale.
+// Consumers that convert Utf8 to Decimal infer the actual precision and scale
+// from the data values at query time.
+func sparkSqlNameFromDBType(dbType string) string {
+	upper := strings.ToUpper(dbType)
+	if upper == "DECIMAL" {
+		return "DECIMAL(38,18)"
+	}
+	return upper
+}
+
+// ensureSchemaMetadata adds Spark:DataType:SqlName metadata to schema fields
+// that are missing it. The Databricks server non-deterministically omits
+// metadata from the Arrow IPC schema. We use driver.Rows column type info
+// (always available via thrift) to fill in the gaps.
+func ensureSchemaMetadata(schema *arrow.Schema, rows driver.Rows) *arrow.Schema {
+	typed, ok := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	if !ok {
+		return schema
+	}
+
+	fields := schema.Fields()
+	changed := false
+	newFields := make([]arrow.Field, len(fields))
+
+	for i, f := range fields {
+		newFields[i] = f
+		if _, ok := f.Metadata.GetValue("Spark:DataType:SqlName"); ok {
+			continue
+		}
+		if dbType := typed.ColumnTypeDatabaseTypeName(i); dbType != "" {
+			newFields[i].Metadata = arrow.MetadataFrom(map[string]string{
+				"Spark:DataType:SqlName": sparkSqlNameFromDBType(dbType),
+			})
+			changed = true
+		}
+	}
+
+	if !changed {
+		return schema
+	}
+	md := schema.Metadata()
+	return arrow.NewSchema(newFields, &md)
 }
 
 func (r *ipcReaderAdapter) loadNextReader() error {
