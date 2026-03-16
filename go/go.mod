@@ -90,3 +90,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/gotestsum v1.8.2 // indirect
 )
+
+// Use spiceai fork that adds Spark:DataType:SqlName metadata fix when server omits ArrowSchema bytes
+replace github.com/databricks/databricks-sql-go => github.com/spiceai/databricks-sql-go v0.0.0-20260314093348-8baf54cdcd47
